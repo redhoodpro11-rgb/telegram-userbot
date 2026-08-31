@@ -2,8 +2,9 @@ import os
 import threading
 from flask import Flask
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
-# --- DUMMY WEB SERVER FOR BACK4APP HEALTH CHECK ---
+# --- DUMMY WEB SERVER FOR HEALTH CHECK ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -11,7 +12,6 @@ def home():
     return "Userbot is alive!", 200
 
 def run_flask():
-    # Back4App ලබා දෙන PORT එක හෝ 8080 භාවිතා කිරීම
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -27,11 +27,11 @@ SESSION_STRING = os.environ.get("SESSION_STRING")
 SOURCE_CHANNEL = -1002237078311
 TARGET_CHANNEL = -1002271887265
 
+# Telethon හි StringSession නිවැරදි ආකාරයට භාවිතා කිරීම
 client = TelegramClient(
-    'userbot_session',
+    StringSession(SESSION_STRING),
     API_ID,
-    API_HASH,
-    session_string=SESSION_STRING
+    API_HASH
 )
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNEL))
