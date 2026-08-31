@@ -5,7 +5,6 @@ from flask import Flask
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# --- DUMMY WEB SERVER FOR HEALTH CHECK ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -19,7 +18,6 @@ def run_flask():
 t = threading.Thread(target=run_flask, daemon=True)
 t.start()
 
-# --- CONFIGURATION ---
 API_ID = 30744056
 API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
@@ -33,30 +31,34 @@ client = TelegramClient(
     API_HASH
 )
 
-# 1. පැරණි Media Copy කරන Function එක
-async def copy_past_media():
-    print("Checking for existing past media...")
-    for channel_id in SOURCE_CHANNELS:
-        try:
-            async for message in client.iter_messages(channel_id, limit=30):
-                if message.media:
-                    await client.send_file(TARGET_CHANNEL, message.media, caption=message.text or "")
-                    await asyncio.sleep(2)  # Telegram Rate Limit නොවීමට
-        except Exception as e:
-            print(f"Error fetching past messages from {channel_id}: {e}")
-
-# 2. අලුතින් එන Media Copy කිරීම
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
+    print(f"[DETECTED] New message in source channel: {event.chat_id}")
     if event.media:
-        await client.send_file(TARGET_CHANNEL, event.media, caption=event.message.text or "")
-        print(f"New Media Forwarded from {event.chat_id}")
+        try:
+            await client.send_file(TARGET_CHANNEL, event.media, caption=event.message.text or "")
+            print("[SUCCESS] Media successfully forwarded to target!")
+        except Exception as e:
+            print(f"[ERROR] Failed to send media: {e}")
+    else:
+        print("[INFO] Message detected but it is text only (no media).")
 
 async def main():
     await client.start()
-    print("Userbot runs successfully!")
-    # Background එකේ පැරණි Media copy කිරීම ආරම්භ කරයි
-    asyncio.create_task(copy_past_media())
+    me = await client.get_me()
+    print(f"==========================================")
+    print(f"Userbot Started as: {me.first_name} (@{me.username})")
+    print(f"Monitoring Source Channels: {SOURCE_CHANNELS}")
+    print(f"Target Channel: {TARGET_CHANNEL}")
+    print(f"==========================================")
+
+    # Test Message එකක් Target එකට දමා අවසර ඇත්දැයි පරීක්ෂා කිරීම
+    try:
+        await client.send_message(TARGET_CHANNEL, "Userbot Connected and Ready!")
+        print("[TEST] Sent test message to target channel successfully!")
+    except Exception as e:
+        print(f"[TEST ERROR] Cannot post to Target Channel: {e}")
+
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
