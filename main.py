@@ -5,7 +5,6 @@ from flask import Flask
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# --- FLASK SERVER FOR HEALTH CHECK ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -19,7 +18,6 @@ def run_flask():
 t = threading.Thread(target=run_flask, daemon=True)
 t.start()
 
-# --- CONFIGURATION ---
 API_ID = 30744056
 API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
@@ -33,37 +31,43 @@ client = TelegramClient(
     API_HASH
 )
 
-target_entity = None
-
-@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
-async def handler(event):
-    global target_entity
-    print(f"[NEW EVENT] Message detected from source: {event.chat_id}")
-    if event.media:
-        try:
-            # Target Entity එක Fetch වී නොමැති නම් Link එකෙන් ලබා ගනී
-            if not target_entity:
-                target_entity = await client.get_entity(TARGET_LINK)
-                
-            await client.send_file(target_entity, event.media, caption=event.message.text or "")
-            print("[SUCCESS] Media forwarded to target channel successfully!")
-        except Exception as e:
-            print(f"[ERROR] Failed to send media: {e}")
-
-async def main():
-    global target_entity
-    await client.start()
-    me = await client.get_me()
-    print(f"Logged in as: {me.first_name}")
-    
-    # Client එක Start වන විටම Target Link එකෙන් Channel Entity එක Load කර ගනී
+# 1. පැරණි Media copy කිරීම
+async def copy_past_history():
+    print("Checking past media in source channels...")
     try:
         target_entity = await client.get_entity(TARGET_LINK)
-        print("[SUCCESS] Target Channel entity fetched successfully!")
+        for channel_id in SOURCE_CHANNELS:
+            print(f"Fetching past media from channel: {channel_id}")
+            async for message in client.iter_messages(channel_id, limit=30):
+                if message.media:
+                    try:
+                        await client.send_file(target_entity, message.media, caption=message.text or "")
+                        print("Past media copied successfully!")
+                        await asyncio.sleep(2)
+                    except Exception as e:
+                        print(f"Error copying past message: {e}")
     except Exception as e:
-        print(f"[WARNING] Could not fetch target entity on startup: {e}")
+        print(f"Error accessing target channel: {e}")
 
-    print("Userbot is active and waiting for new media...")
+# 2. අලුතින් එන Media Live copy කිරීම
+@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
+async def handler(event):
+    print(f"New event detected from: {event.chat_id}")
+    if event.media:
+        try:
+            target_entity = await client.get_entity(TARGET_LINK)
+            await client.send_file(target_entity, event.media, caption=event.message.text or "")
+            print("Live media copied successfully!")
+        except Exception as e:
+            print(f"Error forwarding live media: {e}")
+
+async def main():
+    await client.start()
+    print("Userbot started successfully!")
+    
+    # Start වූ වහාම පසුබිමින් පරණ Posts copy කරයි
+    asyncio.create_task(copy_past_history())
+    
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
