@@ -21,11 +21,6 @@ API_ID = 30744056
 API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
-# Source Channels වල Exact IDs
-SOURCE_CHANNELS = [
-    -1002237078311,
-    -1003988169541  # ඔබ ලබාදුන් අලුත් Private Channel ID එක
-]
 TARGET_CHANNEL = -1002271887265
 
 client = TelegramClient(
@@ -34,10 +29,16 @@ client = TelegramClient(
     API_HASH
 )
 
-@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
+# ඔබේ Account එකට එන සියලුම New Messages Monitor කරයි
+@client.on(events.NewMessage())
 async def handler(event):
-    if event.media:
-        await client.send_file(TARGET_CHANNEL, event.media, caption=event.message.text)
+    chat_id = event.chat_id
+    print(f"New Message Received from Chat ID: {chat_id}")
+    
+    # ID දෙකෙන්ම එන Media, Target එකට Forward කරයි
+    if chat_id in [-1002237078311, -1003988169541, -3988169541]:
+        if event.media:
+            await client.send_file(TARGET_CHANNEL, event.media, caption=event.message.text)
 
 print("Starting Userbot...")
 client.start()
