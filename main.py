@@ -21,10 +21,10 @@ API_ID = 30744056
 API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
-# Sources ගණනාවක් එකතු කිරීමට Array එකක් භාවිතා කරයි
+# Source Channels වල Exact IDs
 SOURCE_CHANNELS = [
-    -1002237078311,              # පළමු Channel ID එක
-    'https://t.me/+EsokVdcBkIdmMGVl'  # අලුත් Private Channel Link එක
+    -1002237078311,
+    -1003988169541  # ඔබ ලබාදුන් අලුත් Private Channel ID එක
 ]
 TARGET_CHANNEL = -1002271887265
 
