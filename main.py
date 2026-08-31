@@ -23,7 +23,8 @@ API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
 SOURCE_CHANNELS = [-1002237078311, -1003988169541]
-TARGET_CHANNEL_ID = -1002271887265
+# Target Channel එකෙහි Invite Link එක කෙලින්ම භාවිත කරයි
+TARGET_CHANNEL_LINK = "https://t.me/+IIyd8KpLHwZkZmFl"
 
 client = TelegramClient(
     StringSession(SESSION_STRING),
@@ -31,36 +32,26 @@ client = TelegramClient(
     API_HASH
 )
 
-target_entity = None
-
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
-    global target_entity
-    print(f"New message from: {event.chat_id}")
+    print(f"--> New message detected from Source Channel: {event.chat_id}")
     if event.media:
         try:
-            # Target Entity එක Cache වී නොමැති නම් Refresh කරයි
-            if not target_entity:
-                target_entity = await client.get_entity(TARGET_CHANNEL_ID)
-                
-            await client.send_file(target_entity, event.media, caption=event.message.text or "")
-            print("Successfully forwarded media to target channel!")
+            # Target Link එක හරහා direct send කිරීමෙන් PeerChannel error එක මගහැරේ
+            await client.send_file(
+                TARGET_CHANNEL_LINK, 
+                event.media, 
+                caption=event.message.text or ""
+            )
+            print("--> SUCCESS: Media forwarded to Target Channel!")
         except Exception as e:
-            print(f"Error while forwarding: {e}")
+            print(f"--> ERROR sending media: {e}")
 
 async def main():
-    global target_entity
     await client.start()
-    print("Fetching Target Channel Entity...")
-    try:
-        # Dialogs Load කර Entity එක සොයා ගනී
-        await client.get_dialogs()
-        target_entity = await client.get_entity(TARGET_CHANNEL_ID)
-        print("Target Channel Entity loaded successfully!")
-    except Exception as e:
-        print(f"Failed to fetch Target Entity on startup: {e}")
-
-    print("Userbot runs successfully!")
+    me = await client.get_me()
+    print(f"Userbot Started as Owner Account: {me.first_name}")
+    print("Waiting for new messages in source channels...")
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
