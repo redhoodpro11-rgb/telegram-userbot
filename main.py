@@ -4,6 +4,7 @@ import asyncio
 from flask import Flask
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 
 app = Flask(__name__)
 
@@ -15,7 +16,6 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# Flask server background run
 t = threading.Thread(target=run_flask, daemon=True)
 t.start()
 
@@ -23,9 +23,8 @@ API_ID = 30744056
 API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
-SOURCE_CHANNELS = [-1002237078311, -1003988169541]
-
-# ඔයා එවපු URL එකෙන් ලබාගත් හරියටම Target Chat ID එක
+# පැරණි Channels 2ට අමතරව '@Hanwallabackup' එකතු කර ඇත
+SOURCE_CHANNELS = [-1002237078311, -1003988169541, "@Hanwallabackup"]
 TARGET_CHAT_ID = -1004401860095
 
 client = TelegramClient(
@@ -34,42 +33,56 @@ client = TelegramClient(
     API_HASH
 )
 
-# 1. පරණ Media (Photos/Videos) සියල්ල මුල සිට අගට Copy කිරීම
+# Photo හෝ Video එකක්දැයි පරීක්ෂා කිරීම
+def is_photo_or_video(message):
+    if not message.media:
+        return False
+    if isinstance(message.media, MessageMediaPhoto):
+        return True
+    if isinstance(message.media, MessageMediaDocument):
+        if message.video or message.gif:
+            return True
+        document = message.media.document
+        if document and document.mime_type:
+            if document.mime_type.startswith('video/') or document.mime_type.startswith('image/'):
+                return True
+    return False
+
+# 1. පරණ Photos/Videos Copy කිරීම
 async def copy_past_history():
-    await asyncio.sleep(5)  # Client connect වීමට තත්පර 5ක් ලබාදීම
-    print("LOG: Starting to fetch past media history...", flush=True)
+    await asyncio.sleep(5)
+    print("LOG: Fetching past photos and videos from all source channels...", flush=True)
     
-    for channel_id in SOURCE_CHANNELS:
-        print(f"LOG: Fetching past media from channel ID: {channel_id}", flush=True)
+    for channel in SOURCE_CHANNELS:
+        print(f"LOG: Checking history in channel: {channel}", flush=True)
         try:
-            # reverse=True මගින් පරණම Post එකේ සිට අලුත්ම Post එක දක්වා පිළිවෙළට Copy වේ
-            async for message in client.iter_messages(channel_id, limit=200, reverse=True):
-                if message.media:
+            async for message in client.iter_messages(channel, limit=300, reverse=True):
+                if is_photo_or_video(message):
                     try:
                         await client.send_file(
                             TARGET_CHAT_ID, 
                             message.media, 
                             caption=message.text or ""
                         )
-                        print(f"LOG: Past media (Msg ID: {message.id}) copied successfully!", flush=True)
-                        await asyncio.sleep(3)  # Telegram Block වීම වැළැක්වීමට Delay එකක්
+                        print(f"LOG: Copied Photo/Video (Msg ID: {message.id}) from {channel}", flush=True)
+                        await asyncio.sleep(4)
                     except Exception as e:
                         print(f"LOG ERROR (Copying msg {message.id}): {e}", flush=True)
         except Exception as e:
-            print(f"LOG ERROR (Fetching channel {channel_id}): {e}", flush=True)
+            print(f"LOG ERROR (Channel {channel}): {e}", flush=True)
 
-# 2. අලුතින් එන Media Live Auto-Forward කිරීම
+# 2. අලුතින් එන Photos/Videos Live Copy කිරීම
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
-    print(f"LOG: New message event received from chat: {event.chat_id}", flush=True)
-    if event.media:
+    if is_photo_or_video(event.message):
+        print(f"LOG: New Photo/Video detected in: {event.chat_id}", flush=True)
         try:
             await client.send_file(
                 TARGET_CHAT_ID, 
                 event.media, 
                 caption=event.message.text or ""
             )
-            print("LOG: Live media forwarded successfully!", flush=True)
+            print("LOG: Live Photo/Video copied successfully!", flush=True)
         except Exception as e:
             print(f"LOG ERROR (Live Forward): {e}", flush=True)
 
@@ -83,7 +96,7 @@ async def main():
         
     print("LOG: Telethon Userbot Connected Successfully!", flush=True)
     
-    # පරණ Posts Copy කිරීම පසුබිමින් ආරම්භ වේ
+    # Background Task එකක් ලෙස පරණ Photos/Videos Copy වීම ආරම්භ වේ
     asyncio.create_task(copy_past_history())
     
     await client.run_until_disconnected()
