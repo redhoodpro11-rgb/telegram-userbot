@@ -32,70 +32,64 @@ client = TelegramClient(
     API_HASH
 )
 
-# Photo / Video විතරක් Filter කරන ශ්‍රිතය (Stickers 100% Skip කරයි)
+# Media එක Photo හෝ Video එකක්දැයි පරීක්ෂා කිරීම
 def is_photo_or_video(message):
     if not message or not message.media:
         return False
-    
-    # 1. Direct Photos
-    if message.photo:
+    if message.web_preview: # Webpage links filter කිරීම
+        return False
+    if message.photo or message.video or message.video_note:
         return True
-    
-    # 2. Videos (Video Files / Short Videos / GIFs)
-    if message.video or message.video_note:
-        return True
-        
-    # 3. Document එකක් ලෙස එවන Photos / Videos (Stickers skip කිරීම)
     if isinstance(message.media, MessageMediaDocument):
         doc = message.media.document
         if doc and doc.mime_type:
-            # Sticker MIME Types හෝ Animated Sticker Skip කිරීම
             if "sticker" in doc.mime_type.lower():
                 return False
             if doc.mime_type.startswith('video/') or doc.mime_type.startswith('image/'):
                 return True
-
     return False
 
-# 1. පැරණි Photos / Videos Copy කිරීම
+# Media එක Download කර Target එකට Upload කිරීම (Protected Bypass)
+async def process_and_send(message):
+    file_path = None
+    try:
+        # File එක Server එකට Download කරගැනීම
+        file_path = await message.download_media()
+        if file_path:
+            await client.send_file(
+                TARGET_CHAT_ID, 
+                file_path, 
+                caption=message.text or ""
+            )
+            print(f"LOG: Successfully downloaded & uploaded Msg ID: {message.id}", flush=True)
+    except Exception as e:
+        print(f"LOG ERROR (Upload Msg {message.id}): {e}", flush=True)
+    finally:
+        # Storage පිරීයාම වැළැක්වීමට File එක delete කිරීම
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+
+# 1. පරණ Media සියල්ල Copy කිරීම
 async def copy_past_history():
     await asyncio.sleep(5)
-    print("LOG: Starting to scan past messages for Photos & Videos...", flush=True)
+    print("LOG: Fetching past photos & videos...", flush=True)
     
     for channel in SOURCE_CHANNELS:
         print(f"LOG: Checking history in channel: {channel}", flush=True)
         try:
-            # මුල සිට අගට පරණ Messages Check කිරීම
             async for message in client.iter_messages(channel, limit=300, reverse=True):
                 if is_photo_or_video(message):
-                    try:
-                        # Message එක Direct Target එකට Copy / Send කිරීම
-                        await client.send_message(
-                            TARGET_CHAT_ID, 
-                            file=message.media, 
-                            message=message.text or ""
-                        )
-                        print(f"LOG: Copied Media (Msg ID: {message.id}) from {channel}", flush=True)
-                        await asyncio.sleep(4)  # Telegram Rate Limit නොවීමට
-                    except Exception as e:
-                        print(f"LOG ERROR (Copying msg {message.id}): {e}", flush=True)
+                    await process_and_send(message)
+                    await asyncio.sleep(3) # Telegram Rate Limit වැළැක්වීමට Delay එක
         except Exception as e:
             print(f"LOG ERROR (Channel {channel}): {e}", flush=True)
 
-# 2. අලුතින් එන Photos / Videos Live Copy කිරීම
+# 2. අලුතින් එන Media Live Copy කිරීම
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
     if is_photo_or_video(event.message):
         print(f"LOG: New Photo/Video detected in chat: {event.chat_id}", flush=True)
-        try:
-            await client.send_message(
-                TARGET_CHAT_ID, 
-                file=event.message.media, 
-                message=event.message.text or ""
-            )
-            print("LOG: Live Photo/Video copied successfully!", flush=True)
-        except Exception as e:
-            print(f"LOG ERROR (Live Forward): {e}", flush=True)
+        await process_and_send(event.message)
 
 async def main():
     print("LOG: Connecting Telegram Client...", flush=True)
@@ -107,9 +101,14 @@ async def main():
         
     print("LOG: Telethon Userbot Connected Successfully!", flush=True)
     
-    # Background එකේ History Task එක Run වේ
+    # Entity Resolution (Channel IDs Load කරගැනීම)
+    for channel in SOURCE_CHANNELS:
+        try:
+            await client.get_entity(channel)
+        except Exception as e:
+            print(f"LOG WARNING: Could not fetch entity for {channel}: {e}", flush=True)
+            
     asyncio.create_task(copy_past_history())
-    
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
