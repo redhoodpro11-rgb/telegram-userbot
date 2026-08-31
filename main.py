@@ -15,6 +15,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
+# Background එකේ Flask App එක Run කිරීම
 t = threading.Thread(target=run_flask, daemon=True)
 t.start()
 
@@ -31,41 +32,56 @@ client = TelegramClient(
     API_HASH
 )
 
-# 1. පැරණි Media copy කිරීම
+# 1. පරණ Media Auto-Copy කරන ශ්‍රිතය
 async def copy_past_history():
-    print("Checking past media in source channels...")
+    print("LOG: Starting to fetch past media history...", flush=True)
     try:
         target_entity = await client.get_entity(TARGET_LINK)
         for channel_id in SOURCE_CHANNELS:
-            print(f"Fetching past media from channel: {channel_id}")
+            print(f"LOG: Fetching past media from channel ID: {channel_id}", flush=True)
             async for message in client.iter_messages(channel_id, limit=30):
                 if message.media:
                     try:
-                        await client.send_file(target_entity, message.media, caption=message.text or "")
-                        print("Past media copied successfully!")
-                        await asyncio.sleep(2)
+                        await client.send_file(
+                            target_entity, 
+                            message.media, 
+                            caption=message.text or ""
+                        )
+                        print("LOG: Past media copied successfully!", flush=True)
+                        await asyncio.sleep(2)  # FloodWait වළක්වා ගැනීමට
                     except Exception as e:
-                        print(f"Error copying past message: {e}")
+                        print(f"LOG ERROR (Past Media): {e}", flush=True)
     except Exception as e:
-        print(f"Error accessing target channel: {e}")
+        print(f"LOG ERROR (Target Entity): {e}", flush=True)
 
-# 2. අලුතින් එන Media Live copy කිරීම
+# 2. අලුතින් එන Media Live Auto-Forward කරන ශ්‍රිතය
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
-    print(f"New event detected from: {event.chat_id}")
+    print(f"LOG: New message event received from chat: {event.chat_id}", flush=True)
     if event.media:
         try:
             target_entity = await client.get_entity(TARGET_LINK)
-            await client.send_file(target_entity, event.media, caption=event.message.text or "")
-            print("Live media copied successfully!")
+            await client.send_file(
+                target_entity, 
+                event.media, 
+                caption=event.message.text or ""
+            )
+            print("LOG: Live media forwarded successfully!", flush=True)
         except Exception as e:
-            print(f"Error forwarding live media: {e}")
+            print(f"LOG ERROR (Live Forward): {e}", flush=True)
 
 async def main():
-    await client.start()
-    print("Userbot started successfully!")
+    print("LOG: Connecting Telegram Client...", flush=True)
+    await client.connect()
     
-    # Start වූ වහාම පසුබිමින් පරණ Posts copy කරයි
+    # Session String එක වලංගු දැයි පරීක්ෂා කිරීම
+    if not await client.is_user_authorized():
+        print("LOG ERROR: Session string is invalid or expired! Please generate a new one.", flush=True)
+        return
+        
+    print("LOG: Telethon Userbot Connected Successfully!", flush=True)
+    
+    # පරණ Posts copy කිරීම පසුබිමින් ආරම්භ වේ
     asyncio.create_task(copy_past_history())
     
     await client.run_until_disconnected()
