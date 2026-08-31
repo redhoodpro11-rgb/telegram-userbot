@@ -1,5 +1,6 @@
 import os
 import threading
+import asyncio
 from flask import Flask
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -23,11 +24,7 @@ API_ID = 30744056
 API_HASH = '3b3e82fb1c426c90331f3f205e126e05'
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
-# Sources: පළමු Channel ID එක සහ අලුත් Private Channel ID එක
-SOURCE_CHANNELS = [
-    -1002237078311,
-    -1003988169541
-]
+SOURCE_CHANNELS = [-1002237078311, -1003988169541]
 TARGET_CHANNEL = -1002271887265
 
 client = TelegramClient(
@@ -36,13 +33,32 @@ client = TelegramClient(
     API_HASH
 )
 
+# 1. පැරණි Media Copy කරන Function එක
+async def copy_past_media():
+    print("Checking for existing past media...")
+    for channel_id in SOURCE_CHANNELS:
+        try:
+            async for message in client.iter_messages(channel_id, limit=30):
+                if message.media:
+                    await client.send_file(TARGET_CHANNEL, message.media, caption=message.text or "")
+                    await asyncio.sleep(2)  # Telegram Rate Limit නොවීමට
+        except Exception as e:
+            print(f"Error fetching past messages from {channel_id}: {e}")
+
+# 2. අලුතින් එන Media Copy කිරීම
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
     if event.media:
-        await client.send_file(TARGET_CHANNEL, event.media, caption=event.message.text)
-        print(f"Media successfully forwarded from {event.chat_id}!")
+        await client.send_file(TARGET_CHANNEL, event.media, caption=event.message.text or "")
+        print(f"New Media Forwarded from {event.chat_id}")
 
-print("Starting Userbot...")
-client.start()
-print("Userbot runs successfully!")
-client.run_until_disconnected()
+async def main():
+    await client.start()
+    print("Userbot runs successfully!")
+    # Background එකේ පැරණි Media copy කිරීම ආරම්භ කරයි
+    asyncio.create_task(copy_past_media())
+    await client.run_until_disconnected()
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
